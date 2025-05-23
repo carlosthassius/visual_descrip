@@ -2,6 +2,7 @@ import numpy as np
 from PIL import Image
 
 class EHDDescriptor:
+    # Padrão do EHDDescriptor na MPEG-7
     QuantTable = np.array([
         [0.010867, 0.057915, 0.099526, 0.144849, 0.195573, 0.260504, 0.358031, 0.530128],
         [0.012266, 0.069934, 0.125879, 0.182307, 0.243396, 0.314563, 0.411728, 0.564319],
@@ -24,28 +25,35 @@ class EHDDescriptor:
         self.diagonal_135_degree_edge = 5
 
     def apply(self, image: Image.Image):
+        '''
+        Prepara a imagem e chama o método para calcular o descritor
+        '''
         image = image.convert('RGB')
         self.width, self.height = image.size
         self.blockSize = self._get_block_size()
 
         # Converter para escala de cinza com luminância Y
         pixels = np.array(image).astype(np.float32)
+        # luminância percebida pelo olho humano, com os respectivos pesos
         Y = (0.114 * pixels[:, :, 2] + 0.587 * pixels[:, :, 1] + 0.299 * pixels[:, :, 0]) / 256.0
         self.grey_level = (219.0 * Y + 16.5).astype(np.float32)
 
         return self.extract_feature()
 
     def _get_block_size(self):
+        # Tamanho do bloco
         a = np.sqrt((self.width * self.height) / self.num_block)
         bsize = int(np.floor(a / 2) * 2)
         return max(bsize, 2)
 
     def _get_block_avg(self, x, y, dx, dy):
+        # Média dos níveis de cinza
         block = self.grey_level[x + dx:x + dx + self.blockSize // 2,
                                 y + dy:y + dy + self.blockSize // 2]
         return block.mean() if block.size > 0 else 0
 
     def _get_edge_feature(self, i, j):
+        # Divisão da imagem em 4 sub-blocos
         avg = [
             self._get_block_avg(i, j, 0, 0),
             self._get_block_avg(i, j, self.blockSize // 2, 0),
@@ -53,6 +61,7 @@ class EHDDescriptor:
             self._get_block_avg(i, j, self.blockSize // 2, self.blockSize // 2),
         ]
 
+        # Filtros de borda
         edge_filter = np.array([
             [1, -1, 1, -1],
             [1, 1, -1, -1],
@@ -61,13 +70,20 @@ class EHDDescriptor:
             [2, -2, -2, 2]
         ])
 
+        # Cálculo da força do tipo de borda
         strengths = np.abs(np.dot(edge_filter, avg))
         max_strength = strengths.max()
+
+        # Verifica se a força atinge o limiar
         if max_strength < self.threshold:
             return self.NoEdge
         return np.argmax(strengths) + 1
 
     def extract_feature(self):
+        '''
+        Calcula o índice da região para cada bloco e incrementa o histograma local de bordas, 
+        retornado com 80 posições, sendo 16 regiões para cada tipo de borda
+        '''
         count_local = [0] * 16
 
         for y in range(0, self.height - self.blockSize + 1, self.blockSize):
@@ -83,11 +99,14 @@ class EHDDescriptor:
         for k in range(80):
             region = k // 5
             if count_local[region] != 0:
-                self.Local_Edge_Histogram[k] /= count_local[region]
+                self.Local_Edge_Histogram[k] /= count_local[region] # Normalização
 
         return self.Local_Edge_Histogram
 
     def quantize(self, histogram):
+        '''
+        Quantiza o histograma com base nas 5 direções de borda do EHD e 8 níveis de quantização por tipo
+        '''
         result = np.zeros_like(histogram)
         for i, val in enumerate(histogram):
             for j in range(8):
