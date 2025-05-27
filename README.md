@@ -25,6 +25,8 @@ O projeto permite:
 
 ## 🖥️ Interface Gráfica
 
+![Interface do Sistema](interface.png)
+
 A interface permite:
 
 - Carregar uma imagem de consulta.
